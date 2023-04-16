@@ -1,5 +1,6 @@
 import io
 import logging
+from collections import defaultdict
 from typing import Any
 
 import hikari
@@ -9,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 rest_app = hikari.RESTApp()
 
-latest_rpt_log_file_name = None
-parsed_rpt_log_file_lines = []
+latest_rpt_log_file_name = defaultdict(lambda: None)
+parsed_rpt_log_file_lines = defaultdict(list)
 
 
 async def download_latest_rpg_logfile(
@@ -73,13 +74,13 @@ async def download_latest_rpg_logfile(
         rpt_log_file_name = rpt_log_file_entries[-1]
 
         global latest_rpt_log_file_name
-        if latest_rpt_log_file_name is None:
-            latest_rpt_log_file_name = rpt_log_file_name
+        if latest_rpt_log_file_name[service_id] is None:
+            latest_rpt_log_file_name[service_id] = rpt_log_file_name
 
-        if latest_rpt_log_file_name != rpt_log_file_name:
+        if latest_rpt_log_file_name[service_id] != rpt_log_file_name:
             global parsed_rpt_log_file_lines
-            latest_rpt_log_file_name = rpt_log_file_name
-            parsed_rpt_log_file_lines = []
+            latest_rpt_log_file_name[service_id] = rpt_log_file_name
+            parsed_rpt_log_file_lines[service_id] = []
 
         async with session.get(
             f"https://api.nitrado.net/services/{service_id}/gameservers/file_server/download",
@@ -129,11 +130,12 @@ async def parse_rpt_logfile(
     lines = [
         line.strip()
         for line in rpt_log_file_buffer.read().decode().splitlines()
-        if "preloading" in line and line not in parsed_rpt_log_file_lines
+        if "preloading" in line
+        and line not in parsed_rpt_log_file_lines[service_id]
     ]
 
     for line in lines:
-        parsed_rpt_log_file_lines.append(line)
+        parsed_rpt_log_file_lines[service_id].append(line)
         time = line.split(" Login: Player ")[0].split(".")[0]
         player_name = line.split("Player ")[1].split(" (")[0]
         x, y, z = line.split(") preloading at: ")[1].split(",")[0].split(" ")
